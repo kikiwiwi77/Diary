@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Typewriter & Shared Journal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Long+Cang&family=Ma+Shan+Zheng&family=Jost:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        :root {
+            --desk-bg: #5d4037; 
+            --desk-texture: repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 10px);
+            --accent-color: #d32f2f; 
+            --paper-base: #fdfbf7; 
+            --paper-line: #a6bcc9; 
+            --font-en: 'Special Elite', monospace;
+            --font-cn: 'Long Cang', cursive;
+            --font-ui: 'Jost', sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background-color: var(--desk-bg);
+            background-image: var(--desk-texture);
+            color: #3e2723;
+            font-family: var(--font-ui);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+            transition: background-color 0.8s ease;
+        }
+
+        #hidden-input { position: absolute; opacity: 0; top: -1000px; }
+
+        /* --- 书架 --- */
+        #shelf-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #e0dcd5; z-index: 2000;
+            display: flex; flex-direction: column; align-items: center; padding-top: 60px;
+            transition: transform 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            background-image: linear-gradient(#ccc 1px, transparent 1px);
+            background-size: 100% 40px;
+        }
+        #shelf-screen.hidden { transform: translateY(-100%); }
+        .shelf-header { font-family: var(--font-en); font-size: 2.5rem; color: #4e342e; margin-bottom: 40px; border-bottom: 3px double #4e342e; padding-bottom: 10px; }
+        .notebook-grid { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; max-width: 1000px; overflow-y: auto; padding-bottom: 50px; width: 100%; }
+        
+        /* 笔记本封面 */
+        .notebook-cover {
+            width: 160px; height: 240px; background: #795548;
+            border-radius: 5px 15px 15px 5px; box-shadow: inset 10px 0 20px rgba(0,0,0,0.3), 5px 10px 15px rgba(0,0,0,0.3);
+            cursor: pointer; display: flex; align-items: center; justify-content: center; flex-direction: column;
+            padding: 20px; text-align: center; color: #f0f0f0; transition: transform 0.3s;
+            position: relative;
+        }
+        .notebook-cover:hover { transform: translateY(-15px) rotateX(10deg); }
+        /* 锁的图标 */
+        .lock-badge {
+            position: absolute; top: 15px; right: 15px;
+            background: #d4a017; color: #3e2723; width: 30px; height: 30px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3); border: 2px solid #8d6e63;
+        }
+        
+        .notebook-add { border: 3px dashed #8d6e63; background: rgba(255,255,255,0.5); color: #5d4037; box-shadow: none; }
+        .cover-classic { background: #3e2723; } .cover-wine { background: #880e4f; } .cover-navy { background: #1a237e; } .cover-olive { background: #33691e; }
+
+        /* --- 滚轮密码锁 UI --- */
+        #lock-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 4000;
+            display: none; justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        .lock-mechanism {
+            background: #2b2b2b; padding: 40px; border-radius: 15px;
+            border: 4px solid #5d4037; box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            text-align: center; position: relative;
+        }
+        .lock-title { color: #f0f0f0; font-family: var(--font-en); margin-bottom: 20px; font-size: 1.2rem; letter-spacing: 2px; }
+        .tumbler-container {
+            display: flex; gap: 15px; background: #111; padding: 20px;
+            border-radius: 10px; border: 2px solid #444; margin-bottom: 20px;
+            box-shadow: inset 0 0 20px #000;
+        }
+        .tumbler-col {
+            display: flex; flex-direction: column; align-items: center; gap: 5px;
+        }
+        .tumbler-btn {
+            background: #444; border: none; color: #aaa; cursor: pointer;
+            width: 40px; height: 25px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+        }
+        .tumbler-btn:hover { background: #666; color: #fff; }
+        .tumbler-window {
+            width: 50px; height: 60px; background: linear-gradient(to bottom, #ccc, #fff, #ccc);
+            border-radius: 5px; border: 2px solid #000;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Special Elite', monospace; font-size: 2.5rem; color: #333;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
+            user-select: none;
+        }
+        .unlock-btn {
+            background: #d4a017; border: none; padding: 10px 30px;
+            font-family: var(--font-en); font-weight: bold; font-size: 1.1rem;
+            cursor: pointer; border-radius: 5px; box-shadow: 0 5px 0 #8d6e63;
+            color: #3e2723; transition: transform 0.1s;
+        }
+        .unlock-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #8d6e63; }
+
+        /* --- 工作区 --- */
+        #workspace { display: flex; height: 100%; flex-direction: column; }
+        #desk-bar { padding: 15px 30px; display: flex; justify-content: space-between; z-index: 50; pointer-events: none; }
+        .bar-btn { pointer-events: auto; background: #fcfcfc; border: 1px solid #d7ccc8; padding: 8px 16px; border-radius: 20px; color: #5d4037; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; gap: 6px; cursor: pointer; }
+        .bar-group { display: flex; gap: 10px; pointer-events: auto; }
+
+        /* --- 日历 --- */
+        #calendar-widget {
+            position: absolute; top: 80px; left: 40px; width: 240px; background: #fff; border: 8px solid #f2e8d5; border-radius: 4px; box-shadow: 0 10px 20px rgba(0,0,0,0.2); font-family: var(--font-ui); transform: rotate(-2deg); z-index: 10;
+        }
+        #calendar-widget::before { content: ''; position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 120px; height: 20px; border-radius: 10px; border: 4px solid #8d6e63; border-bottom: none; }
+        .cal-header { background: var(--accent-color); color: white; text-align: center; padding: 5px; font-weight: bold; transition: background 0.5s; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); padding: 10px; gap: 2px; }
+        .cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; color: #555; position: relative; }
+        .cal-day.today { font-weight: bold; color: var(--accent-color); text-decoration: underline; }
+        .cal-sticker { position: absolute; font-size: 1.2rem; z-index: 2; filter: drop-shadow(1px 1px 0px rgba(0,0,0,0.1)); }
+        .mood-sticker-display {
+            position: absolute; bottom: -50px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; background: #fdfbf7; padding: 10px 20px; border-radius: 0 0 10px 10px; border: 2px solid #e0e0e0; border-top: none; box-shadow: 0 5px 10px rgba(0,0,0,0.1);
+        }
+        .big-sticker { font-size: 2rem; opacity: 0.2; transition: all 0.3s; filter: grayscale(0.8); }
+        .big-sticker.active { opacity: 1; transform: scale(1.3); filter: grayscale(0); }
+
+        /* --- 纸张与翻页 --- */
+        #paper-area { flex: 1; display: flex; justify-content: center; padding-bottom: 300px; perspective: 2000px; cursor: text; position: relative; }
+        #paper-wrapper { margin-top: 10px; width: 700px; height: 1000px; transform-style: preserve-3d; transform-origin: center center; }
+
+        .flipping-next { animation: flipNext 0.7s cubic-bezier(0.4, 0.0, 0.2, 1) forwards; }
+        .flipping-prev { animation: flipPrev 0.7s cubic-bezier(0.4, 0.0, 0.2, 1) forwards; }
+
+        @keyframes flipNext {
+            0% { transform: translateX(0) rotateY(0) scale(1); opacity: 1; }
+            50% { transform: translateX(-50px) rotateY(-85deg) scale(0.9); opacity: 0.5; }
+            100% { transform: translateX(0) rotateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes flipPrev {
+            0% { transform: translateX(0) rotateY(0) scale(1); opacity: 1; }
+            50% { transform: translateX(50px) rotateY(85deg) scale(0.9); opacity: 0.5; }
+            100% { transform: translateX(0) rotateY(0) scale(1); opacity: 1; }
+        }
+
+        #paper-sheet {
+            width: 100%; height: 100%; background-color: var(--paper-base);
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2); padding: 80px 70px;
+            font-size: 24px; line-height: 1.6; color: #2b2b2b;
+            white-space: pre-wrap; word-wrap: break-word; overflow: hidden;
+            position: relative; backface-visibility: hidden;
+        }
+        #paper-sheet.lined { background-image: repeating-linear-gradient(transparent 0px, transparent 39px, var(--paper-line) 40px); line-height: 40px; }
+
+        .page-number { position: absolute; bottom: 20px; right: 30px; font-family: var(--font-cn); color: #888; font-size: 1rem; pointer-events: none; }
+        .page-controls { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); width: 860px; display: flex; justify-content: space-between; pointer-events: none; z-index: 150; }
+        .page-btn {
+            pointer-events: auto; background: #fff; border: 2px solid var(--accent-color); width: 50px; height: 50px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--accent-color); transition: all 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-size: 1.5rem; opacity: 0.9;
+        }
+        .page-btn:hover { background: var(--accent-color); color: white; transform: scale(1.15); }
+        .page-btn.disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; border-color: #ccc; color: #ccc; }
+
+        .caret { display: inline-block; width: 2px; height: 24px; background: var(--accent-color); animation: blink 1s infinite; vertical-align: text-bottom; margin-left: 1px; transition: background 0.5s; }
+        @keyframes blink { 50% { opacity: 0; } }
+        
+        .font-typewriter { font-family: var(--font-en); }
+        .font-handwriting { font-family: var(--font-cn); font-size: 1.1em; letter-spacing: 1px; }
+        .img-container { display: inline-block; position: relative; margin: 15px; vertical-align: top; max-width: 45%; float: right; clear: right; border: 6px solid #fff; box-shadow: 2px 2px 8px rgba(0,0,0,0.15); transform: rotate(2deg); }
+        .img-container img { display: block; width: 100%; pointer-events: none; }
+
+        /* --- 打字机 --- */
+        #typewriter-body { position: fixed; bottom: -20px; left: 50%; transform: translateX(-50%); width: 860px; height: 340px; background: linear-gradient(to bottom, #f2e8d5, #e0d4c0); border-radius: 30px 30px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,0.3), inset 0 2px 10px rgba(255,255,255,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; padding-top: 40px; }
+        #roller { position: absolute; top: -50px; width: 92%; height: 70px; background: repeating-linear-gradient(90deg, #212121, #212121 2px, #3e2723 4px); border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.4); z-index: -1; }
+        #ruler { position: absolute; top: -10px; width: 85%; height: 20px; background: #e0e0e0; color: #555; border: 1px solid #ccc; font-family: monospace; font-size: 10px; display: flex; align-items: center; padding-left: 5px; }
+        .brand-plate { background: var(--accent-color); color: #f2e8d5; padding: 4px 15px; border-radius: 2px; font-family: var(--font-en); font-weight: bold; letter-spacing: 2px; font-size: 0.9rem; box-shadow: 1px 1px 3px rgba(0,0,0,0.2); margin-bottom: 20px; transition: background 0.5s; }
+        .keyboard-area { background: rgba(0,0,0,0.05); padding: 20px 40px; border-radius: 20px; box-shadow: inset 0 2px 5px rgba(0,0,0,0.1); }
+        .kb-row { display: flex; gap: 10px; margin-bottom: 12px; justify-content: center; }
+        .key { width: 46px; height: 46px; border-radius: 50%; background: #3e2723; border: 3px solid #d7ccc8; box-shadow: 0 5px 0 #281915, 0 8px 5px rgba(0,0,0,0.2); color: #f2e8d5; display: flex; justify-content: center; align-items: center; font-family: var(--font-en); font-weight: bold; font-size: 1.1rem; cursor: pointer; position: relative; top: 0; transition: top 0.05s; }
+        .key::after { content: ''; position: absolute; top: 3px; left: 3px; right: 3px; bottom: 3px; border: 1px solid rgba(255,255,255,0.2); border-radius: 50%; }
+        .key:active, .key.active { top: 5px; box-shadow: 0 0 0 #281915; background: #4e342e; }
+        .key.space { width: 300px; border-radius: 10px; background: #5d4037; } .key.space::after { border-radius: 6px; }
+        
+        .toggle-group { position: absolute; right: 30px; top: 30px; display: flex; flex-direction: column; gap: 20px; }
+        .lang-switch-box { display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; }
+        .lang-toggle { width: 40px; height: 70px; background: #8d6e63; border-radius: 20px; position: relative; border: 2px solid #5d4037; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
+        .toggle-stick { width: 30px; height: 30px; background: var(--accent-color); border-radius: 50%; position: absolute; left: 3px; top: 3px; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); border: 1px solid rgba(0,0,0,0.2); transition: top 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.5s; }
+        .lang-toggle.cn .toggle-stick { top: 35px; } .lang-label { font-size: 0.6rem; font-weight: bold; color: #5d4037; }
+        .music-toggle { width: 40px; height: 40px; border-radius: 50%; background: #bcaaa4; border: 2px solid #8d6e63; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 3px 5px rgba(0,0,0,0.2); transition: all 0.2s; }
+        .music-toggle.active { background: #ffecb3; color: var(--accent-color); transform: translateY(2px); }
+
+        #create-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(93, 64, 55, 0.6); z-index: 3000; justify-content: center; align-items: center; }
+        .modal-card { background: #fdfbf7; padding: 30px; width: 320px; border: 1px solid #d7ccc8; box-shadow: 0 20px 50px rgba(0,0,0,0.3); border-radius: 4px; text-align: center; }
+        .modal-input { width: 100%; padding: 12px; margin: 15px 0; background: #fff; border: 1px solid #ccc; font-family: var(--font-ui); }
+        .modal-btn { background: #5d4037; color: white; padding: 10px 25px; font-weight: bold; margin-top: 10px; cursor:pointer;}
+        
+        .privacy-option { display: flex; justify-content: space-around; margin: 20px 0; }
+        .privacy-btn { padding: 8px 15px; border: 1px solid #8d6e63; background: #fff; color: #5d4037; border-radius: 20px; cursor: pointer; }
+        .privacy-btn.active { background: #5d4037; color: #fff; }
+        #modal-lock-setup { display: none; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <textarea id="hidden-input"></textarea>
+
+    <!-- 滚轮密码锁界面 -->
+    <div id="lock-overlay">
+        <div class="lock-mechanism">
+            <div class="lock-title">ENTER CODE</div>
+            <div class="tumbler-container" id="lock-tumblers">
+                <!-- 动态生成 3 个滚轮 -->
+            </div>
+            <button class="unlock-btn" onclick="tryUnlock()">UNLOCK</button>
+            <div style="margin-top:15px; color:#aaa; cursor:pointer;" onclick="closeLock()">Cancel</div>
+        </div>
+    </div>
+
+    <div id="shelf-screen">
+        <div class="shelf-header">SHARED COLLECTION</div>
+        <div class="notebook-grid" id="notebook-grid">
+            <div class="notebook-cover notebook-add" onclick="openCreateModal()"><i class="ph ph-plus" style="font-size: 3rem;"></i><div style="margin-top:10px;">New Book</div></div>
+        </div>
+    </div>
+
+    <div id="create-modal">
+        <div class="modal-card">
+            <h3 style="color:#5d4037; margin-top:0;">START A NEW STORY</h3>
+            <input type="text" class="modal-input" id="new-book-title" placeholder="Title..." maxlength="15">
+            <select class="modal-input" id="new-book-color">
+                <option value="cover-classic">Classic Leather</option><option value="cover-wine">Vintage Wine</option><option value="cover-navy">Royal Navy</option><option value="cover-olive">Olive Green</option>
+            </select>
+            
+            <div class="privacy-option">
+                <div class="privacy-btn active" id="btn-public" onclick="setCreatePrivacy('public')">Public</div>
+                <div class="privacy-btn" id="btn-private" onclick="setCreatePrivacy('private')">Private</div>
+            </div>
+            
+            <div id="modal-lock-setup">
+                <div style="font-size:0.8rem; margin-bottom:5px; color:#d32f2f;">SET PASSCODE (Roller)</div>
+                <!-- 简化版滚轮设置，这里直接用数字展示，实际创建时会弹出大锁或者简化 -->
+                <div style="font-size:0.8rem; color:#555; margin-bottom:10px;">You will set the code on first entry.</div>
+            </div>
+
+            <div style="display:flex; justify-content:center; gap:10px;">
+                <button class="modal-btn" style="background:#bcaaa4" onclick="closeCreateModal()">Cancel</button><button class="modal-btn" onclick="createNotebook()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="workspace">
+        <div id="desk-bar">
+            <button class="bar-btn" onclick="returnToShelf()"><i class="ph ph-books"></i> Shelf</button>
+            <div class="bar-group">
+                <input type="file" id="img-upload" hidden accept="image/*"><button class="bar-btn" onclick="document.getElementById('img-upload').click()"><i class="ph ph-image"></i> Photo</button><button class="bar-btn" onclick="togglePaperStyle()"><i class="ph ph-note"></i> Style</button>
+            </div>
+        </div>
+
+        <div id="calendar-widget">
+            <div class="cal-header" id="cal-header">OCT 1985</div>
+            <div class="cal-grid" id="cal-grid"></div>
+            <div class="mood-sticker-display"><div class="big-sticker" id="sticker-sad">😢</div><div class="big-sticker" id="sticker-happy">😊</div></div>
+        </div>
+
+        <div id="paper-area" onclick="focusInput()">
+            <div class="page-controls">
+                <div class="page-btn" id="btn-prev" onclick="prevPage(event)"><i class="ph ph-caret-left"></i></div>
+                <div class="page-btn" id="btn-next" onclick="nextPage(event)"><i class="ph ph-caret-right"></i></div>
+            </div>
+            <div id="paper-wrapper">
+                <div id="paper-sheet" class="lined"></div>
+            </div>
+        </div>
+
+        <div id="typewriter-body" onclick="focusInput()">
+            <div id="roller"></div><div id="ruler">|....|....10....|....20....|....30....|....40....|....50....|</div><div class="brand-plate">ROYAL TYPEWRITER</div>
+            <div class="keyboard-area">
+                <div class="kb-row"><div class="key" data-key="q">Q</div><div class="key" data-key="w">W</div><div class="key" data-key="e">E</div><div class="key" data-key="r">R</div><div class="key" data-key="t">T</div><div class="key" data-key="y">Y</div><div class="key" data-key="u">U</div><div class="key" data-key="i">I</div><div class="key" data-key="o">O</div><div class="key" data-key="p">P</div></div>
+                <div class="kb-row"><div class="key" data-key="a">A</div><div class="key" data-key="s">S</div><div class="key" data-key="d">D</div><div class="key" data-key="f">F</div><div class="key" data-key="g">G</div><div class="key" data-key="h">H</div><div class="key" data-key="j">J</div><div class="key" data-key="k">K</div><div class="key" data-key="l">L</div><div class="key" style="width:auto; padding:0 15px; border-radius:10px;" data-code="Enter">↵</div></div>
+                <div class="kb-row"><div class="key" data-key="z">Z</div><div class="key" data-key="x">X</div><div class="key" data-key="c">C</div><div class="key" data-key="v">V</div><div class="key" data-key="b">B</div><div class="key" data-key="n">N</div><div class="key" data-key="m">M</div><div class="key" style="width:auto; padding:0 15px; border-radius:10px;" data-code="Backspace">←</div></div>
+                <div class="kb-row"><div class="key space" data-code="Space"></div></div>
+            </div>
+            <div class="toggle-group">
+                <div class="lang-switch-box" onclick="toggleLang()"><div class="lang-toggle" id="lang-switch"><div class="toggle-stick"></div></div><div class="lang-label" id="lang-label">EN</div></div>
+                <div class="music-toggle" id="bgm-switch" onclick="toggleBGM()"><i class="ph ph-music-note"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <audio id="sfx-key" src="https://assets.mixkit.co/active_storage/sfx/2405/2405-preview.mp3"></audio>
+    <audio id="sfx-return" src="https://assets.mixkit.co/active_storage/sfx/1066/1066-preview.mp3"></audio>
+    <audio id="sfx-page" src="https://assets.mixkit.co/active_storage/sfx/2402/2402-preview.mp3"></audio>
+    <audio id="bgm-jazz" loop src="https://assets.mixkit.co/active_storage/sfx/2437/2437-preview.mp3"></audio>
+    <!-- 锁声 -->
+    <audio id="sfx-lock" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"></audio>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, collection, addDoc, doc, setDoc, updateDoc, onSnapshot, query, orderBy } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        // --- App State ---
+        let notebooks = [];
+        let currentBook = null;
+        let currentBookId = null;
+        let currentPageIndex = 0;
+        let bgmPlaying = false;
+        let currentLang = 'en';
+        let isComposing = false;
+        let typingTimer = null;
+        let isFlipping = false;
+        
+        let pendingPrivacy = 'public';
+        let targetUnlockId = null;
+        let targetUnlockMode = 'unlock'; // 'unlock' or 'set'
+        let lockCombination = [0, 0, 0];
+
+        const themes = { 'cover-classic': { desk: '#5d4037', accent: '#d32f2f' }, 'cover-wine': { desk: '#3e2723', accent: '#880e4f' }, 'cover-navy': { desk: '#263238', accent: '#1a237e' }, 'cover-olive': { desk: '#33691e', accent: '#558b2f' } };
+        const sentiments = { happy: ['happy', 'good', 'joy', 'love', 'excited', 'nice', 'sweet', 'cool', 'fun', '开心', '快乐', '美好', '喜欢', '棒', '爱', '哈哈', '幸福'], sad: ['sad', 'bad', 'cry', 'pain', 'lonely', 'hate', 'awful', 'hurt', 'tired', '难过', '悲伤', '讨厌', '哭', '痛苦', '烦', '累', '糟糕'] };
+
+        const paperSheet = document.getElementById('paper-sheet');
+        const hiddenInput = document.getElementById('hidden-input');
+        const paperWrapper = document.getElementById('paper-wrapper');
+
+        // Define global UI functions first
+        window.openCreateModal = () => document.getElementById('create-modal').style.display = 'flex';
+        window.closeCreateModal = () => document.getElementById('create-modal').style.display = 'none';
+        
+        window.setCreatePrivacy = (mode) => {
+            pendingPrivacy = mode;
+            document.getElementById('btn-public').classList.toggle('active', mode === 'public');
+            document.getElementById('btn-private').classList.toggle('active', mode === 'private');
+            document.getElementById('modal-lock-setup').style.display = mode === 'private' ? 'block' : 'none';
+        };
+
+        window.createNotebook = async () => {
+            const title = document.getElementById('new-book-title').value || 'Untitled';
+            const color = document.getElementById('new-book-color').value;
+            
+            const newBook = {
+                title, color, created: Date.now(),
+                pages: [''], style: 'lined', moodMap: {},
+                ownerId: userId,
+                isPrivate: pendingPrivacy === 'private',
+                password: null 
+            };
+
+            closeCreateModal();
+            
+            if (db) {
+                try {
+                    const docRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'retro_journals'), newBook);
+                    newBook.id = docRef.id;
+                    if (newBook.isPrivate) openLockUI(newBook.id, 'set');
+                } catch (e) { console.error(e); }
+            } else {
+                newBook.id = 'local-' + Date.now();
+                notebooks.push(newBook);
+                localStorage.setItem('retro_local_books', JSON.stringify(notebooks));
+                renderShelf();
+                if (newBook.isPrivate) openLockUI(newBook.id, 'set');
+            }
+        };
+
+        // --- Firebase Config & Auth ---
+        let app, auth, db;
+        const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'retro-app';
+        let userId = null;
+        let firebaseConfig = null;
+
+        // 如果你在本地运行且希望使用云端共享，请在此处填入 Firebase 控制台提供的配置对象
+        // 如果不填，将默认使用本地存储 (Local Storage)
+        
+        
+        const MANUAL_FIREBASE_CONFIG = {apiKey: "AIzaSyCFl0ZxOke_WYK37LtnwzPrikchoVJ2dMY",
+                authDomain: "study-catstudycat.firebaseapp.com",
+                projectId: "study-catstudycat",
+                storageBucket: "study-catstudycat.firebasestorage.app",
+                messagingSenderId: "992935068668",
+                appId: "1:992935068668:web:7fbd497908754a732f6879",
+                measurementId: "G-CZHLVZ0BF2"
+            
+        };
+        
+
+        try {
+            if (typeof window.__firebase_config !== 'undefined' && window.__firebase_config) {
+                firebaseConfig = JSON.parse(window.__firebase_config);
+            } else if (MANUAL_FIREBASE_CONFIG) {
+                firebaseConfig = MANUAL_FIREBASE_CONFIG;
+            }
+        } catch (e) { console.warn("Local mode: No config"); }
+
+        if (firebaseConfig) {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                const initAuth = async () => {
+                    if (window.__initial_auth_token) {
+                        await signInWithCustomToken(auth, window.__initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                };
+                initAuth();
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        subscribeNotebooks(); 
+                    }
+                });
+            } catch (err) {
+                console.error("Firebase Init Failed:", err);
+                fallbackToLocal();
+            }
+        } else {
+            fallbackToLocal();
+        }
+
+        function fallbackToLocal() {
+            console.warn("Running in local mode (localStorage)");
+            userId = 'local-user';
+            setTimeout(() => {
+                const localBooks = JSON.parse(localStorage.getItem('retro_local_books') || '[]');
+                notebooks = localBooks;
+                renderShelf();
+            }, 500);
+        }
+
+        // --- Data Operations ---
+        function subscribeNotebooks() {
+            if (!db) return;
+            const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'retro_journals'));
+            onSnapshot(q, (snapshot) => {
+                notebooks = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    data.id = doc.id;
+                    notebooks.push(data);
+                });
+                notebooks.sort((a,b) => b.created - a.created);
+                renderShelf();
+            });
+        }
+
+        window.openNotebook = (id) => {
+            const book = notebooks.find(n => n.id === id);
+            if (!book) return;
+
+            if (book.isPrivate) {
+                if (book.ownerId === userId && !book.password) {
+                    openLockUI(id, 'set');
+                } else {
+                    openLockUI(id, 'unlock');
+                }
+            } else {
+                loadBookIntoWorkspace(book);
+            }
+        }
+
+        function loadBookIntoWorkspace(book) {
+            currentBook = book;
+            currentBookId = book.id;
+            applyTheme(book.color);
+            document.getElementById('shelf-screen').classList.add('hidden');
+            loadPage(0);
+            renderCalendar();
+        }
+
+        // --- Lock Mechanism ---
+        function openLockUI(bookId, mode) {
+            targetUnlockId = bookId;
+            targetUnlockMode = mode;
+            lockCombination = [0, 0, 0];
+            
+            const overlay = document.getElementById('lock-overlay');
+            const title = overlay.querySelector('.lock-title');
+            const btn = overlay.querySelector('.unlock-btn');
+            
+            if (mode === 'set') {
+                title.innerText = "SET NEW PASSCODE";
+                btn.innerText = "SET & OPEN";
+            } else {
+                title.innerText = "ENTER PASSCODE";
+                btn.innerText = "UNLOCK";
+            }
+            
+            renderTumblers();
+            overlay.style.display = 'flex';
+        }
+
+        window.closeLock = () => {
+            document.getElementById('lock-overlay').style.display = 'none';
+            targetUnlockId = null;
+        }
+
+        function renderTumblers() {
+            const container = document.getElementById('lock-tumblers');
+            container.innerHTML = '';
+            
+            lockCombination.forEach((val, idx) => {
+                const col = document.createElement('div');
+                col.className = 'tumbler-col';
+                const btnUp = document.createElement('button');
+                btnUp.className = 'tumbler-btn';
+                btnUp.innerHTML = '▲';
+                btnUp.onclick = () => rotateTumbler(idx, 1);
+                
+                const win = document.createElement('div');
+                win.className = 'tumbler-window';
+                win.innerText = val;
+                
+                const btnDown = document.createElement('button');
+                btnDown.className = 'tumbler-btn';
+                btnDown.innerHTML = '▼';
+                btnDown.onclick = () => rotateTumbler(idx, -1);
+                
+                col.append(btnUp, win, btnDown);
+                container.appendChild(col);
+            });
+        }
+
+        function rotateTumbler(idx, dir) {
+            let val = lockCombination[idx];
+            val += dir;
+            if (val > 9) val = 0; if (val < 0) val = 9;
+            lockCombination[idx] = val;
+            const audio = document.getElementById('sfx-lock');
+            if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
+            renderTumblers();
+        }
+
+        window.tryUnlock = async () => {
+            const code = lockCombination.join('');
+            const book = notebooks.find(n => n.id === targetUnlockId);
+            
+            if (targetUnlockMode === 'set') {
+                book.password = code;
+                if (db) {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'retro_journals', targetUnlockId), { password: code });
+                } else {
+                    localStorage.setItem('retro_local_books', JSON.stringify(notebooks));
+                }
+                closeLock();
+                loadBookIntoWorkspace(book);
+            } else {
+                if (book.password === code) {
+                    closeLock();
+                    loadBookIntoWorkspace(book);
+                } else {
+                    const win = document.querySelector('.lock-mechanism');
+                    win.style.transform = 'translateX(10px)';
+                    setTimeout(() => win.style.transform = 'translateX(-10px)', 100);
+                    setTimeout(() => win.style.transform = 'none', 200);
+                }
+            }
+        }
+
+        // --- General UI ---
+
+        window.renderShelf = () => {
+            const grid = document.getElementById('notebook-grid');
+            const addBtn = grid.querySelector('.notebook-add');
+            Array.from(grid.children).forEach(c => { if(c !== addBtn) c.remove(); });
+            
+            notebooks.forEach(nb => {
+                const div = document.createElement('div');
+                div.className = `notebook-cover ${nb.color}`;
+                div.innerHTML = `
+                    <div style="font-family:var(--font-en); font-size:1.1rem; border:2px solid rgba(255,255,255,0.3); padding:5px 10px;">${nb.title}</div>
+                    <div style="margin-top:auto; font-size:0.7rem; opacity:0.8;">${new Date(nb.created).toLocaleDateString()}</div>
+                    ${nb.isPrivate ? '<div class="lock-badge"><i class="ph ph-lock-key"></i></div>' : ''}
+                `;
+                div.onclick = () => openNotebook(nb.id);
+                grid.insertBefore(div, addBtn);
+            });
+        }
+
+        function applyTheme(colorClass) {
+            const theme = themes[colorClass] || themes['cover-classic'];
+            document.documentElement.style.setProperty('--desk-bg', theme.desk);
+            document.documentElement.style.setProperty('--accent-color', theme.accent);
+        }
+
+        // --- Save Logic ---
+        window.saveCurrentPage = async () => {
+            if (!currentBook) return;
+            if (!currentBook.pages) currentBook.pages = [''];
+            
+            if (typingTimer) { clearInterval(typingTimer); typingTimer = null; }
+
+            const clone = paperSheet.cloneNode(true);
+            clone.querySelectorAll('.caret, .page-number').forEach(el => el.remove());
+            
+            const newPages = [...currentBook.pages];
+            newPages[currentPageIndex] = clone.innerHTML;
+            currentBook.pages = newPages;
+
+            if (db) {
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'retro_journals', currentBookId), { pages: newPages });
+                } catch(e) { console.error(e); }
+            } else {
+                localStorage.setItem('retro_local_books', JSON.stringify(notebooks));
+            }
+            getCaret();
+        }
+
+        window.returnToShelf = async () => {
+            if (!currentBook) return;
+            await saveCurrentPage();
+            currentBook = null;
+            document.getElementById('shelf-screen').classList.remove('hidden');
+        }
+
+        // --- Page & Typewriter Logic ---
+
+        window.loadPage = (index) => {
+            if (typingTimer) { clearInterval(typingTimer); typingTimer = null; }
+            if (!currentBook.pages) currentBook.pages = [''];
+            
+            if (index < 0) index = 0;
+            if (index >= currentBook.pages.length) {
+                const currentContent = currentBook.pages[currentBook.pages.length - 1] || "";
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = currentContent;
+                if (tempDiv.textContent.trim().length > 0 || tempDiv.querySelector('img')) {
+                     currentBook.pages.push('');
+                } else {
+                    index = currentBook.pages.length - 1;
+                }
+            }
+            
+            currentPageIndex = index;
+            paperSheet.innerHTML = currentBook.pages[index] || '';
+            paperSheet.className = currentBook.style || 'lined';
+            paperSheet.querySelectorAll('.img-container').forEach(attachImageEvents);
+            
+            updatePageNumber();
+            updateNavButtons();
+
+            if (!paperSheet.textContent.trim() && !paperSheet.querySelector('img')) {
+                autoTypeDate();
+            } else {
+                getCaret();
+            }
+            focusInput();
+        }
+
+        window.updatePageNumber = () => {
+            const oldPn = paperSheet.querySelector('.page-number'); if(oldPn) oldPn.remove();
+            const pn = document.createElement('div'); pn.className = 'page-number'; pn.innerText = `- ${currentPageIndex + 1} -`;
+            paperSheet.appendChild(pn);
+        }
+        window.updateNavButtons = () => {
+            const btnPrev = document.getElementById('btn-prev');
+            if (currentPageIndex === 0) btnPrev.classList.add('disabled'); else btnPrev.classList.remove('disabled');
+        }
+        window.prevPage = (e) => {
+            e.stopPropagation();
+            if (isFlipping || currentPageIndex <= 0) return;
+            isFlipping = true;
+            saveCurrentPage();
+            playSfx('page');
+            paperWrapper.classList.add('flipping-prev');
+            setTimeout(() => loadPage(currentPageIndex - 1), 350);
+            setTimeout(() => { paperWrapper.classList.remove('flipping-prev'); isFlipping = false; }, 700);
+        }
+        window.nextPage = (e) => {
+            e.stopPropagation();
+            if (isFlipping) return;
+            // Allow flip if not empty
+            const content = paperSheet.textContent.trim();
+            const img = paperSheet.querySelector('img');
+            if (!content && !img && currentPageIndex === currentBook.pages.length - 1) return;
+
+            isFlipping = true;
+            saveCurrentPage();
+            playSfx('page');
+            paperWrapper.classList.add('flipping-next');
+            setTimeout(() => loadPage(currentPageIndex + 1), 350);
+            setTimeout(() => { paperWrapper.classList.remove('flipping-next'); isFlipping = false; }, 700);
+        }
+
+        window.autoTypeDate = () => {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+            const dateDiv = document.createElement('div');
+            dateDiv.style.textAlign = 'right'; dateDiv.style.color = 'var(--accent-color)'; dateDiv.style.marginBottom = '30px'; dateDiv.style.fontFamily = 'var(--font-cn)'; dateDiv.className = 'date-entry';
+            if (paperSheet.firstChild) paperSheet.insertBefore(dateDiv, paperSheet.firstChild); else paperSheet.appendChild(dateDiv);
+            let i = 0;
+            typingTimer = setInterval(() => {
+                if (i < dateStr.length) { playSfx('key'); dateDiv.textContent += dateStr[i]; i++; }
+                else { clearInterval(typingTimer); typingTimer = null; playSfx('return'); insertNode(document.createElement('div')); getCaret(); saveCurrentPage(); }
+            }, 80);
+        }
+
+        window.focusInput = () => { hiddenInput.focus(); scrollToCaret(); }
+        hiddenInput.addEventListener('compositionstart', () => isComposing = true);
+        hiddenInput.addEventListener('compositionend', (e) => { isComposing = false; if (e.data) for (let c of e.data) typeChar(c); hiddenInput.value = ''; });
+        hiddenInput.addEventListener('input', (e) => {
+            if (isComposing) return;
+            if (e.inputType === 'insertText' && e.data) for (let c of e.data) typeChar(c);
+            else if (e.inputType === 'deleteContentBackward') handleDelete();
+            hiddenInput.value = '';
+        });
+        hiddenInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && hiddenInput.value === '') { handleDelete(); animateKey('Backspace'); }
+            else if (e.key === 'Enter') { e.preventDefault(); handleEnter(); animateKey('Enter'); }
+            else if (e.key.length === 1 && !isComposing) animateKey(e.key);
+        });
+
+        window.typeChar = (char) => {
+            playSfx('key');
+            const span = document.createElement('span'); span.textContent = char;
+            span.className = (/[\u4e00-\u9fa5]/.test(char) || currentLang === 'cn') ? 'font-handwriting' : 'font-typewriter';
+            insertNode(span); scrollToCaret();
+            if([' ', '。', '.', '！', '!'].includes(char)) analyzeMood();
+        }
+        window.handleEnter = () => { playSfx('return'); insertNode(document.createElement('br')); analyzeMood(); }
+        window.handleDelete = () => {
+            playSfx('key'); const caret = getCaret(); const prev = caret.previousSibling;
+            if (prev && !prev.classList.contains('page-number') && !prev.classList.contains('date-entry')) {
+                if (prev.classList.contains('img-container')) { if(confirm("Remove photo?")) prev.remove(); } else prev.remove();
+            }
+        }
+        window.insertNode = (n) => { const c = getCaret(); c.parentNode.insertBefore(n, c); }
+        window.getCaret = () => {
+            let c = paperSheet.querySelector('.caret');
+            if (!c) { c = document.createElement('span'); c.className = 'caret'; const pn = paperSheet.querySelector('.page-number'); if (pn) paperSheet.insertBefore(c, pn); else paperSheet.appendChild(c); }
+            return c;
+        }
+        window.scrollToCaret = () => { const c = getCaret(); if (c.offsetTop > paperSheet.parentElement.scrollTop + paperSheet.parentElement.clientHeight - 150) c.scrollIntoView({ behavior: "smooth", block: "center" }); }
+
+        window.setupKeyboard = () => {
+            document.querySelectorAll('.key').forEach(key => {
+                key.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); const k = key.getAttribute('data-key'); const code = key.getAttribute('data-code');
+                    if (code === 'Backspace') { handleDelete(); animateKey('Backspace'); }
+                    else if (code === 'Enter') { handleEnter(); animateKey('Enter'); }
+                    else if (code === 'Space') { typeChar(' '); animateKey('Space'); }
+                    else if (k) { typeChar(k); animateKey(k); }
+                });
+            });
+        }
+        window.animateKey = (k) => {
+            let sel = `.key[data-key="${k.toLowerCase()}"]`;
+            if (k === 'Enter') sel = '.key[data-code="Enter"]'; if (k === 'Backspace') sel = '.key[data-code="Backspace"]'; if (k === ' ' || k === 'Space') sel = '.key[data-code="Space"]';
+            const el = document.querySelector(sel); if (el) { el.classList.add('active'); setTimeout(() => el.classList.remove('active'), 100); }
+        }
+
+        window.closeCreateModal = () => document.getElementById('create-modal').style.display = 'none';
+        window.openCreateModal = () => document.getElementById('create-modal').style.display = 'flex';
+        window.togglePaperStyle = () => { const s = paperSheet.classList.contains('lined') ? 'blank' : 'lined'; paperSheet.className = s; if(currentBook) currentBook.style = s; }
+        window.toggleLang = () => {
+            const sw = document.getElementById('lang-switch'); const lb = document.getElementById('lang-label'); playSfx('key');
+            if (currentLang === 'en') { currentLang = 'cn'; sw.classList.add('cn'); lb.innerText = 'CN'; } else { currentLang = 'en'; sw.classList.remove('cn'); lb.innerText = 'EN'; }
+            focusInput();
+        }
+        window.renderCalendar = () => {
+            const now = new Date(); const grid = document.getElementById('cal-grid'); document.getElementById('cal-header').innerText = now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
+            grid.innerHTML = '';
+            const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(); const first = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
+            for(let i=0; i<first; i++) grid.appendChild(document.createElement('div'));
+            for(let d=1; d<=days; d++) {
+                const el = document.createElement('div'); el.className = 'cal-day'; el.innerText = d;
+                const mood = currentBook ? (currentBook.moodMap[new Date(now.getFullYear(), now.getMonth(), d).toDateString()]) : null;
+                if (mood) { const s = document.createElement('div'); s.className = 'cal-sticker'; s.innerText = mood === 'happy' ? '😊' : (mood === 'sad' ? '😢' : '😐'); s.style.transform = `rotate(${Math.random()*20-10}deg)`; el.appendChild(s); }
+                if(d === now.getDate()) el.classList.add('today'); grid.appendChild(el);
+            }
+        }
+        window.analyzeMood = () => {
+            if (!currentBook) return; const txt = paperSheet.innerText.toLowerCase(); let score = 0;
+            sentiments.happy.forEach(w => { if(txt.includes(w)) score++; }); sentiments.sad.forEach(w => { if(txt.includes(w)) score--; });
+            let mood = 'neutral'; if (score > 0) mood = 'happy'; if (score < 0) mood = 'sad';
+            document.getElementById('sticker-happy').classList.toggle('active', mood === 'happy');
+            document.getElementById('sticker-sad').classList.toggle('active', mood === 'sad');
+            setTimeout(() => { document.getElementById('sticker-happy').classList.remove('active'); document.getElementById('sticker-sad').classList.remove('active'); }, 1500);
+            const key = new Date().toDateString(); 
+            if (currentBook.moodMap[key] !== mood) { currentBook.moodMap[key] = mood; renderCalendar(); saveCurrentPage(); }
+        }
+        window.playSfx = (t) => {
+            const a = t === 'page' ? document.getElementById('sfx-page') : (t === 'return' ? document.getElementById('sfx-return') : document.getElementById('sfx-key'));
+            if (a) { a.currentTime = 0; a.playbackRate = t === 'page' ? 0.9 + Math.random()*0.1 : 0.95 + Math.random()*0.1; a.play().catch(()=>{}); }
+        }
+        window.toggleBGM = () => {
+            const bgm = document.getElementById('bgm-jazz'); const btn = document.getElementById('bgm-switch');
+            if (bgmPlaying) { bgm.pause(); btn.classList.remove('active'); } else { bgm.volume = 0.4; bgm.play().catch(()=>{}); btn.classList.add('active'); }
+            bgmPlaying = !bgmPlaying;
+        }
+        document.getElementById('img-upload').addEventListener('change', function(e) {
+            if (e.target.files[0]) { const r = new FileReader(); r.onload = (ev) => { const d = document.createElement('div'); d.className = 'img-container'; d.contentEditable = false; const i = document.createElement('img'); i.src = ev.target.result; d.appendChild(i); insertNode(d); attachImageEvents(d); this.value = ''; }; r.readAsDataURL(e.target.files[0]); }
+        });
+        window.attachImageEvents = (d) => d.onclick = (e) => e.stopPropagation();
+
+    </script>
+</body>
+</html>
